@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-azure
+demo-site
+.git
+.claude
+.cursor
+coverage
+*.md
+!.env.example
+.dev.vars
+.env
+.env.*

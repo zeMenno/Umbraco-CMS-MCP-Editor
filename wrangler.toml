@@ -1,4 +1,5 @@
-# Cloudflare Worker Configuration for Hosted MCP Server
+# Legacy Cloudflare Worker configuration.
+# Prefer Azure Container Apps (`npm run build:azure` / infra/main.bicep) for new hosts.
 #
 # Setup:
 # 1. Create KV namespace: npx wrangler kv namespace create OAUTH_KV
