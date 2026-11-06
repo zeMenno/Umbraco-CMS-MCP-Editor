@@ -138,22 +138,44 @@ describe("my-tool", () => {
 });
 ```
 
-## Hosted Worker (Cloudflare)
+## Hosted MCP (Azure Container Apps) — preferred
 
-`src/worker.ts` is the entry point for the hosted Cloudflare Worker deployment. It wires `umbracoCloudSiteRouting` unconditionally; the library decides per request whether to engage multi-tenant routing by reading `siteRouting.enabled?(env)`.
+Single-tenant hosted MCP for one Umbraco instance (`UMBRACO_BASE_URL`). Entry point: `src/hosted/azure/server.ts`.
 
-The Cloud preset gates engagement on a single env var:
+```bash
+# Build the Azure host bundle
+npm run build:azure
 
-```toml
-# wrangler.toml
-[vars]
-UMBRACO_CLOUD_ROUTING_ENABLED = "true"  # multi-tenant: /at/{alias}/ + per-request URLs
+# Configure (see .env.azure.example)
+export UMBRACO_BASE_URL=https://your-umbraco.example.com
+export UMBRACO_OAUTH_CLIENT_ID=umbraco-editor-mcp-hosted
+export COOKIE_ENCRYPTION_KEY=$(openssl rand -hex 32)
+# Optional: Azure Cache for Redis (in-memory if omitted)
+# export REDIS_URL=rediss://:PASSWORD@NAME.redis.cache.windows.net:6380
+
+npm run start:azure
+# MCP: http://localhost:8080/mcp  Health: http://localhost:8080/health
 ```
 
-- Set `UMBRACO_CLOUD_ROUTING_ENABLED = "true"` in `wrangler.toml [vars]` to flip the Worker into multi-tenant Cloud mode — no source edit required.
-- Leave it unset (or set to anything else) for single-tenant deployments that honor `UMBRACO_BASE_URL`.
+**Umbraco OpenIddict:** use `demo-site-template/McpOAuthComposer.cs`. Set `MCP_HOSTED_URL` to the public Container Apps URL (e.g. `https://umbraco-mcp-editor-app.…azurecontainerapps.io`) so `/callback` and `/logout-callback` are registered.
 
-Each Cloud project served by a multi-tenant Worker must register an OpenIddict client with id `umbraco-cms-editor-mcp-hosted` (the per-MCP-type identity baked into `worker.ts`).
+**Docker / infra:**
+
+```bash
+docker build -t umbraco-mcp-editor:local .
+az deployment group create -g <rg> -f infra/main.bicep -p infra/main.bicepparam \
+  cookieEncryptionKey=$(openssl rand -hex 32) \
+  containerImage=<your-acr>/umbraco-mcp-editor:tag \
+  umbracoBaseUrl=https://your-umbraco.example.com
+```
+
+Connect MCP clients to `https://<container-app-fqdn>/mcp`.
+
+Hosted e2e defaults to this Node host (`npm run build:azure && npm run test:e2e`). Set `HOSTED_E2E_RUNTIME=wrangler` for the legacy Worker.
+
+### Legacy: Cloudflare Worker
+
+`src/worker.ts` + `wrangler.toml` remain for existing Cloudflare deployments. Prefer Azure for new hosts. Cloud multi-tenant `/at/{alias}/` routing stays Worker-only for now.
 
 ## Publishing
 

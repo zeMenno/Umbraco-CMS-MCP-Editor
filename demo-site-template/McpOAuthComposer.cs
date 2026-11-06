@@ -8,13 +8,14 @@ using Umbraco.Cms.Core.Notifications;
 namespace MyUmbracoProject;
 
 /// <summary>
-/// Registers the MCP Worker as an OpenIdDict authorization_code client
-/// so the hosted MCP server can authenticate via Umbraco's backoffice.
+/// Registers the hosted MCP server as an OpenIdDict authorization_code client
+/// so the MCP host can authenticate via Umbraco's backoffice.
 ///
 /// Copy this file into your Umbraco project. Umbraco auto-discovers it via IComposer.
 ///
-/// For Cloudflare Tunnel support, add "MCP_TUNNEL_URL" to appsettings.local.json
-/// (the scripts/tunnels.sh script does this automatically).
+/// Optional appsettings keys (e.g. appsettings.local.json):
+/// - MCP_TUNNEL_URL — Cloudflare Tunnel / ngrok base URL for local Worker callbacks
+/// - MCP_HOSTED_URL — Azure Container Apps (or other) public MCP host base URL
 /// </summary>
 public class McpOAuthComposer : IComposer
 {
@@ -74,10 +75,13 @@ public class RegisterMcpClientHandler
             DisplayName = "Umbraco MCP Server",
             RedirectUris =
             {
+                // Local Cloudflare Worker / Azure host defaults
                 new Uri("http://localhost:8787/callback"),
                 new Uri("http://localhost:8788/callback"),
                 new Uri("http://127.0.0.1:8787/callback"),
                 new Uri("http://127.0.0.1:8788/callback"),
+                new Uri("http://localhost:8080/callback"),
+                new Uri("http://127.0.0.1:8080/callback"),
             },
             // Required for "Log in as different user" (RP-Initiated Logout)
             PostLogoutRedirectUris =
@@ -86,6 +90,8 @@ public class RegisterMcpClientHandler
                 new Uri("http://localhost:8788/logout-callback"),
                 new Uri("http://127.0.0.1:8787/logout-callback"),
                 new Uri("http://127.0.0.1:8788/logout-callback"),
+                new Uri("http://localhost:8080/logout-callback"),
+                new Uri("http://127.0.0.1:8080/logout-callback"),
             },
             Permissions =
             {
@@ -99,15 +105,21 @@ public class RegisterMcpClientHandler
             }
         };
 
-        // Add tunnel callback URL if configured (set by scripts/tunnels.sh)
-        var tunnelUrl = _configuration["MCP_TUNNEL_URL"];
-        if (!string.IsNullOrEmpty(tunnelUrl))
-        {
-            var baseUrl = tunnelUrl.TrimEnd('/');
-            descriptor.RedirectUris.Add(new Uri($"{baseUrl}/callback"));
-            descriptor.PostLogoutRedirectUris.Add(new Uri($"{baseUrl}/logout-callback"));
-        }
+        AddCallbackBase(descriptor, _configuration["MCP_TUNNEL_URL"]);
+        AddCallbackBase(descriptor, _configuration["MCP_HOSTED_URL"]);
 
         await _applicationManager.CreateAsync(descriptor, cancellationToken);
+    }
+
+    private static void AddCallbackBase(OpenIddictApplicationDescriptor descriptor, string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            return;
+        }
+
+        var trimmed = baseUrl.TrimEnd('/');
+        descriptor.RedirectUris.Add(new Uri($"{trimmed}/callback"));
+        descriptor.PostLogoutRedirectUris.Add(new Uri($"{trimmed}/logout-callback"));
     }
 }
